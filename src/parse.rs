@@ -7,16 +7,16 @@ use select::{
 };
 
 #[derive(Debug)]
-pub struct PocketBookHighlight {
-    pub text: BookmarkContent,
-    pub note: Option<BookmarkNote>,
+pub struct Note {
+    pub highlight: NoteHighlight,
+    pub comment: Option<NoteComment>,
     pub page: Page,
 }
 
-impl PocketBookHighlight {
-    pub fn is_page_bookmark(&self) -> bool {
-        const PAGE_BOOKMARK_CONTENT: &'static str = "Bookmark";
-        self.text.0 == PAGE_BOOKMARK_CONTENT && self.note.is_none()
+impl Note {
+    pub fn is_bookmark(&self) -> bool {
+        const BOOKMARK_CONTENT: &'static str = "Bookmark";
+        self.highlight.0 == BOOKMARK_CONTENT && self.comment.is_none()
     }
 }
 
@@ -30,9 +30,9 @@ impl std::fmt::Display for BookAuthor {
 }
 
 #[derive(Debug)]
-pub struct NotesExportDate(String);
+pub struct ExportDate(String);
 
-impl std::fmt::Display for NotesExportDate {
+impl std::fmt::Display for ExportDate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -55,17 +55,17 @@ impl std::fmt::Display for Page {
     }
 }
 #[derive(Debug)]
-pub struct BookmarkContent(String);
+pub struct NoteHighlight(String);
 
-impl std::fmt::Display for BookmarkContent {
+impl std::fmt::Display for NoteHighlight {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 #[derive(Debug)]
-pub struct BookmarkNote(String);
+pub struct NoteComment(String);
 
-impl std::fmt::Display for BookmarkNote {
+impl std::fmt::Display for NoteComment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -81,14 +81,16 @@ impl<'a> TryFrom<Node<'a>> for BookAuthor {
             .ok_or("Expected <span> element with book author inside")?;
         let author_name = author_node
             .first_child()
+            .ok_or("Expected contents in <span> element")?
+            .as_text()
             .ok_or("Expected text inside <span> element")?
-            .text();
+            .to_owned();
 
         Ok(Self(author_name))
     }
 }
 
-impl<'a> TryFrom<Node<'a>> for NotesExportDate {
+impl<'a> TryFrom<Node<'a>> for ExportDate {
     type Error = &'static str;
 
     fn try_from(value: Node<'a>) -> Result<Self, Self::Error> {
@@ -98,8 +100,9 @@ impl<'a> TryFrom<Node<'a>> for NotesExportDate {
             .ok_or("Expected <h1> element with export date and book title inside")?;
         let content = h1_node
             .first_child()
-            .ok_or("Expected text inside <h1> element")?
-            .text();
+            .ok_or("Expected contents inside <h1> element")?
+            .as_text()
+            .ok_or("Expected text inside <h1> element")?;
         let export_date = content
             .split_once(" - ")
             .ok_or("Expected text with ' - ' inside to delimit export date and book title")?
@@ -120,8 +123,9 @@ impl<'a> TryFrom<Node<'a>> for BookTitle {
             .ok_or("Expected <h1> element with export date and book title inside")?;
         let content = h1_node
             .first_child()
-            .ok_or("Expected text inside <h1> element")?
-            .text();
+            .ok_or("Expected contents inside <h1> element")?
+            .as_text()
+            .ok_or("Expected text inside <h1> element")?;
         let book_title = content
             .split_once(" - ")
             .ok_or("Expected text with ' - ' inside to delimit export date and book title")?
@@ -132,7 +136,7 @@ impl<'a> TryFrom<Node<'a>> for BookTitle {
     }
 }
 
-impl<'a> TryFrom<Node<'a>> for BookmarkNote {
+impl<'a> TryFrom<Node<'a>> for NoteComment {
     type Error = &'static str;
 
     fn try_from(value: Node<'a>) -> Result<Self, Self::Error> {
@@ -145,13 +149,13 @@ impl<'a> TryFrom<Node<'a>> for BookmarkNote {
             .next()
             .ok_or("Expected one 'p' element inside '.bm-note'")?;
 
-        let content = paragraph_node.text();
-        let content = content.trim();
-        Ok(Self(content.to_owned()))
+        let comment = paragraph_node.text();
+        let comment = comment.trim();
+        Ok(Self(comment.to_owned()))
     }
 }
 
-impl<'a> TryFrom<Node<'a>> for BookmarkContent {
+impl<'a> TryFrom<Node<'a>> for NoteHighlight {
     type Error = &'static str;
 
     fn try_from(value: Node<'a>) -> Result<Self, Self::Error> {
@@ -187,19 +191,19 @@ impl<'a> TryFrom<Node<'a>> for BookmarkContent {
     }
 }
 
-impl<'a> TryFrom<Node<'a>> for PocketBookHighlight {
+impl<'a> TryFrom<Node<'a>> for Note {
     type Error = String;
 
     fn try_from(value: Node<'a>) -> Result<Self, Self::Error> {
-        let bookmark_content: BookmarkContent = value
+        let content: NoteHighlight = value
             .try_into()
             .map_err(|e| format!("Expected bookmark to include highlight/content: {e}"))?;
         let page: Page = value.try_into()?;
-        let bookmark_note: Option<BookmarkNote> = value.try_into().ok();
+        let comment: Option<NoteComment> = value.try_into().ok();
         Ok(Self {
             page,
-            text: bookmark_content,
-            note: bookmark_note,
+            highlight: content,
+            comment,
         })
     }
 }
@@ -231,13 +235,13 @@ pub struct Book {
 }
 
 #[derive(Debug)]
-pub struct PocketBookNotes {
+pub struct PocketBookNotesExport {
     pub book: Book,
-    pub export_date: NotesExportDate,
-    pub notes: Vec<PocketBookHighlight>,
+    pub export_date: ExportDate,
+    pub notes: Vec<Note>,
 }
 
-impl FromStr for PocketBookNotes {
+impl FromStr for PocketBookNotesExport {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -248,7 +252,7 @@ impl FromStr for PocketBookNotes {
         let title_node = nodes
             .next()
             .ok_or("Expected at least one HTML node with 'bookmark' class")?;
-        let export_date: NotesExportDate = title_node.try_into()?;
+        let export_date: ExportDate = title_node.try_into()?;
         let title: BookTitle = title_node.try_into()?;
 
         let author_node = nodes
@@ -256,7 +260,7 @@ impl FromStr for PocketBookNotes {
             .ok_or("Expected another HTML node with 'bookmark' class")?;
         let author: BookAuthor = author_node.try_into()?;
 
-        let notes: Vec<PocketBookHighlight> = nodes.flat_map(|n| n.try_into()).collect();
+        let notes: Vec<Note> = nodes.flat_map(|n| n.try_into()).collect();
 
         Ok(Self {
             book: Book { author, title },

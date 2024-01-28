@@ -1,6 +1,6 @@
 mod parse;
 
-use parse::PocketBookNotes;
+use parse::PocketBookNotesExport;
 
 #[derive(Debug)]
 enum HighlightCategory {
@@ -27,17 +27,17 @@ struct ReadwiseBookHighlight {
 
 fn main() {
     let notes_str = include_str!("../notes/basb.html");
-    let notes: PocketBookNotes = notes_str.parse().unwrap();
+    let export: PocketBookNotesExport = notes_str.parse().unwrap();
 
     println!(
         "Notes from '{}' book by {}",
-        notes.book.title, notes.book.author
+        export.book.title, export.book.author
     );
-    for ele in notes.notes.iter().filter(|n| !n.is_page_bookmark()) {
-        println!("{}", ele.text);
-        if let Some(note) = &ele.note {
+    for note in export.notes.iter().filter(|n| !n.is_bookmark()) {
+        println!("{}", note.highlight);
+        if let Some(note) = &note.comment {
             println!("*Note*: {}", note);
         }
-        println!("Page: {}", ele.page);
+        println!("Page: {}", note.page);
     }
 }
