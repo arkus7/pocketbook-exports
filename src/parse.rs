@@ -182,8 +182,8 @@ impl<'a> TryFrom<Node<'a>> for NoteHighlight {
                 recur(&child, string)
             }
         }
-        let content = content.trim();
         let content = content
+            .trim()
             .replace('“', "\"")
             .replace('”', "\"")
             .replace('’', "'");
