@@ -25,6 +25,7 @@ struct ReadwiseBookHighlight {
     note: Option<String>,
     location: Option<usize>,
     location_type: Option<HighlightLocationType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     highlighted_at: Option<String>,
 }
 
